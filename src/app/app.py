@@ -1,19 +1,27 @@
 import pprint
 from pymongo.errors import ServerSelectionTimeoutError
-from printer import info, warning, error
+from utils.printer import warning, error, info
 from flask import Flask, request
 from requests import post
 from pymongo import MongoClient
-from constants import *
+from consts import *
+
+
+# TODO hande 'close issue' events
 
 app = Flask(__name__)
-client = MongoClient('localhost', DEFAULT_PORT_DB)
+client = MongoClient('localhost', MONGO_PORT)
 user_collection = client.iax058x.users
 
 # TODO Note Hook for issue comments
 # TODO start mongo manually
 
 SUPPORTED_EVENTS = [GITLAB_EVENT_ISSUE]
+
+
+def verify_state():
+    # TODO run a test bundle on startup to verify all running
+    pass
 
 
 @app.route('/', methods=['GET'])
@@ -119,4 +127,5 @@ def send_slack_message(payload):
 
 
 if __name__ == '__main__':
-    app.run(port=DEFAULT_PORT_APP)
+    verify_state()
+    app.run(port=SERVER_PORT)

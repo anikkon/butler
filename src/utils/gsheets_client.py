@@ -11,14 +11,13 @@ Example usage:
 """
 
 import httplib2, os, re
-from constants import GOOGLE_SHEETS_SHEET_NAME
+from consts import GOOGLE_SHEETS_SHEET_NAME
 from apiclient import discovery
 from oauth2client import client, tools
 from oauth2client.file import Storage
 
 try:
     import argparse
-
     flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
 except ImportError:
     flags = None

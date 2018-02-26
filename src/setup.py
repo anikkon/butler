@@ -3,51 +3,28 @@ import pprint
 import pymongo
 import requests
 from pymongo.errors import ServerSelectionTimeoutError
-from printer import info, warning, error
+from utils.printer import info, warning, error
 from pymongo import MongoClient
-from constants import *
-from google_sheets_client import GoogleSheetsClient
+from consts.constants import *
+from utils.gsheets_client import GoogleSheetsClient
 
 
-client = MongoClient('localhost', DEFAULT_PORT_DB)
+client = MongoClient(MONGO_ADDRESS, MONGO_PORT)
 user_collection = client.iax058x.users
-
-# TODO start mongo manually
-# FIXME Gitlab.pld ssl verification fails.. Using no-verify by default
-
-
-def get_args():
-    """"""
-    parser = argparse.ArgumentParser(
-        description="A simple argument parser",
-        epilog="This is where you might put example usage"
-    )
-
-    # required argument
-    parser.add_argument('-x', action="store", required=True,
-                        help='Help text for option X')
-    # optional arguments
-    parser.add_argument('-y', help='Help text for option Y', default=False)
-    parser.add_argument('-z', help='Help text for option Z', type=int)
-    return parser.parse_args()
-
-
-if __name__ == '__main__':
-    get_args()
-
 
 
 def config():
+    #  TODO add support for smth other than GS
     users = get_google_sheets_data()
     old_users = mongo_get_users()
     info('Found {0} username pairs in Google Sheets.'.format(len(users)))
     info('Verifying Slack usernames.')
-    verify_slack_users(users)
+    users = verify_slack_users(users)
     info('Verified {0} users.'.format(len(users)))
     info('Verifying Gitlab usernames and projects.')
-    verify_gitlab_users(users)
+    users = verify_gitlab_users(users)
     info('Verified {0} users.'.format(len(users)))
-    verify_old_users(users)
+    users = verify_old_users(users)
     info('Verified {0} users: {1}. This is final:'
          .format(len(users), [(u.get(KEY_SLACK_UNAME) + " : " + u.get(KEY_GITLAB_UNAME)) for u in users]))
     pprint.pprint(users)
@@ -72,17 +49,22 @@ def get_google_sheets_data():
 
     # Find columns by name
     for column in columns:
+        offset = GOOGLE_SHEETS_COLUMN_OFFSET
         if GOOGLE_SHEETS_COL_GITLAB_UNAMES in column:
-            gitlab_users = column[1:]
+            gitlab_users = column[offset:]
         elif GOOGLE_SHEETS_COL_SLACK_UNAMES in column:
-            slack_users = column[1:]
+            slack_users = column[offset:]
         elif GOOGLE_SHEETS_COL_GITLAB_REPOS in column:
-            gitlab_repos = column[1:]
+            gitlab_repos = column[offset:]
         if gitlab_users and slack_users and gitlab_repos:
             break
     else:
-        # TODO fix issue with ValueError if the column is empty
-        raise ValueError('Invalid column or row name')
+        not_found = []
+        if not gitlab_users: not_found.append(GOOGLE_SHEETS_COL_GITLAB_UNAMES)
+        if not slack_users:  not_found.append(GOOGLE_SHEETS_COL_SLACK_UNAMES)
+        if not gitlab_repos: not_found.append(GOOGLE_SHEETS_COL_GITLAB_REPOS)
+        raise ValueError('Google Sheets column{s} \"{not_found}\" invalid or empty.'
+                         .format(not_found="\", \"".join(not_found), s="s" if len(not_found) > 1 else ""))
 
     for i in range(0, min(len(slack_users), len(gitlab_users))):
         if slack_users[i] and gitlab_users[i]:
@@ -105,8 +87,7 @@ def get_google_sheets_data():
 def get_gitlab_user_projects(user):
     uname = user.get(KEY_GITLAB_UNAME)
     response = requests.get(GITLAB_GET_PROJECTS_URL.format(username=uname),
-                            headers=GITLAB_AUTH_HEADER, timeout=10,
-                            verify=False)  # Gitlab.pld ssl verification fails.. FIXME
+                            headers=GITLAB_AUTH_HEADER, timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY)
     projects = response.json()
     if response.status_code == requests.codes.ok:
         if projects:
@@ -125,7 +106,7 @@ def get_gitlab_user_projects(user):
 
 
 def verify_slack_users(users):
-    response = requests.get(SLACK_GET_USER_LIST_URL, headers=SLACK_AUTH_HEADER, timeout=10)
+    response = requests.get(SLACK_GET_USER_LIST_URL, headers=SLACK_AUTH_HEADER, timeout=REQUEST_TIMEOUT)
     slack_users = response.json().get("members", [])
     verified_users = []
 
@@ -134,9 +115,10 @@ def verify_slack_users(users):
 
     def verify_user(slack_uname, slack_id, user_index):
         unames[user_index] = None
-        users[user_index][KEY_SLACK_UNAME] = slack_uname
-        users[user_index][KEY_SLACK_ID] = slack_id
-        verified_users.append(users[user_index])
+        user = users[user_index].copy()
+        user[KEY_SLACK_UNAME] = slack_uname
+        user[KEY_SLACK_ID] = slack_id
+        verified_users.append(user)
 
     for slack_user in slack_users:
         name = slack_user.get('name', None)
@@ -162,7 +144,7 @@ def verify_slack_users(users):
             pass
 
     verify_users_not_empty(verified_users)
-    users = verified_users[:]
+    return verified_users
 
 
 def verify_gitlab_users(users):
@@ -196,14 +178,13 @@ def verify_gitlab_users(users):
     if not verified_users:
         warning('Couldn\'t verify any gitlab users. Make sure Gitlab auth token is correct.')
         exit(1)
-    users = verified_users[:]
+    return verified_users
 
 
 def verify_gitlab_user(user):
     uname = user.get(KEY_GITLAB_UNAME)
     response = requests.get(GITLAB_GET_USER_URL.format(username=uname),
-                            headers=GITLAB_AUTH_HEADER, timeout=10,
-                            verify=False)  # Gitlab.pld ssl verification fails.. FIXME
+                            headers=GITLAB_AUTH_HEADER, timeout=REQUEST_TIMEOUT, verify=SSL_VERIFY)
     if response.status_code != requests.codes.ok:
         warning('Woops, something went wrong! Gitlab returned {0}'.format(response.status_code))
     elif response.json():
@@ -223,13 +204,13 @@ def verify_users_not_empty(users):
 def verify_old_users(new_users):
     old_users = mongo_get_users()
     if not old_users:
-        return
+        return new_users
     new_unames = set([u.get(KEY_GITLAB_UNAME) for u in new_users])
     old_unames = set([u.get(KEY_GITLAB_UNAME) for u in old_users])
     diff_unames = list(old_unames - new_unames)
 
     if not diff_unames:
-        return
+        return new_users
 
     diff_users = [[item for item in old_users if item[KEY_GITLAB_UNAME] == uname][0] for uname in diff_unames]
     warning('The following users are in db, but not in the new dataset: {users}'.format(users=diff_unames))
@@ -238,10 +219,8 @@ def verify_old_users(new_users):
     while True:
         choice = input().lower()
         if choice == 'k':
-            new_users.extend(diff_users)
-            return new_users
+            return new_users + diff_users
         elif choice == 'd':
-            # TODO delete all webhooks
             return new_users
         elif choice == 'c':
             break
@@ -249,18 +228,21 @@ def verify_old_users(new_users):
 
     print('\nOk, choosing for each user manually. Let\'s go:')
 
+    tmp = []
+
     for user in diff_users:
         uname = user.get(KEY_GITLAB_UNAME)
         print('\nUser: \'{username}\'\nK - Keep\nD - Delete'.format(username=uname))
         while True:
             choice = input().lower()
             if choice == 'k':
-                new_users.append(user)
+                tmp.append(user)
                 break
             elif choice == 'd':
-                # TODO delete webhook
                 break
             print('Choose \'K\' or \'D\'')
+
+    return new_users + diff_users
 
 
 def mongo_get_users():
@@ -286,7 +268,6 @@ def mongo_insert_users(users):
 
 
 def set_gitlab_webhooks(users):
-    # TODO append port to url
     for index, user in enumerate(users):
         project_id = user.get(KEY_GITLAB_REPO_ID)
         uname = user.get(KEY_GITLAB_UNAME)
@@ -294,7 +275,7 @@ def set_gitlab_webhooks(users):
         if not project_id:
             # User has no gitlab repo - doesn't need a webhook.
             continue
-        response = post_gitlab_webhook(project_id, APP_URL)
+        response = post_gitlab_webhook(project_id, SERVER_ADDRESS)
         webhook_id = get_gitlab_webhook_id(project_id)
 
         if response.status_code != requests.codes.created:
@@ -315,19 +296,16 @@ def delete_gitlab_webhooks(users):
 def delete_gitlab_webhook(project_id, webhook_id, verify=False):
     requests.delete(GITLAB_GET_PUT_DELETE_PROJECT_HOOK.format(
         project_id=project_id, hook_id=webhook_id), headers=GITLAB_AUTH_HEADER,
-        timeout=10, verify=verify)
+        timeout=REQUEST_TIMEOUT, verify=verify)
 
 
 def get_gitlab_webhook_id(project_id, verify=False):
     webhooks = requests.get(GITLAB_GET_PROJECT_HOOKS.format(
         project_id=project_id), headers=GITLAB_AUTH_HEADER,
-        timeout=10, verify=verify).json()
-
-    # webhook = next(wh for wh in webhooks if wh.get('url') == APP_URL)
-    # return webhook.get('id')
+        timeout=REQUEST_TIMEOUT, verify=verify).json()
 
     for wh in webhooks:
-        if wh.get('url') == APP_URL:
+        if wh.get('url') == SERVER_ADDRESS:
             return wh.get('id')
 
 
@@ -335,8 +313,8 @@ def post_gitlab_webhook(project_id, url, issue_events=True, note_events=True, ve
     content = {'url': url, 'id': project_id, 'issues_events': issue_events, 'note_events': note_events}
     return requests.post(GITLAB_POST_WEBHOOK_URL.format(
         project_id=project_id), headers=GITLAB_AUTH_HEADER,
-        timeout=10, json=content, verify=verify)
-#
-#
-# if __name__ == '__main__':
-#     config()
+        timeout=REQUEST_TIMEOUT, json=content, verify=verify)
+
+
+if __name__ == '__main__':
+    config()

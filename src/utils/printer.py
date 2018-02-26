@@ -1,3 +1,8 @@
+"""
+Provides utility methods for pretty logging
+"""
+
+
 def info(string):
     print(Color.INFO + 'INFO: ' + Color.ENDC + string)
 
