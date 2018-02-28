@@ -16,11 +16,6 @@ from apiclient import discovery
 from oauth2client import client, tools
 from oauth2client.file import Storage
 
-try:
-    import argparse
-    flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
-except ImportError:
-    flags = None
 
 SHEET_NAME = GOOGLE_SHEETS_SHEET_NAME
 SHEET_RANGE = SHEET_NAME + '!A1:ZZ100000'
@@ -28,6 +23,16 @@ APPLICATION_NAME = 'Google Sheets Master'
 DISCOVERY_URL = 'https://sheets.googleapis.com/$discovery/rest?version=v4'
 SCOPES = 'https://www.googleapis.com/auth/spreadsheets'
 CLIENT_CREDENTIALS_FILE = 'google-sheets-master.json'
+flags = None
+
+
+def __init_args():
+    global flags
+    try:
+        import argparse
+        flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
+    except ImportError:
+        flags = None
 
 
 class GoogleSheetsClient:
@@ -40,6 +45,7 @@ class GoogleSheetsClient:
         If no credentials are found or they are invalid user is prompted for authentication
         to to obtain the new credentials.
         """
+        # self.__init_args()
         try:
             path_to_client_secret = self.__get_absolute_path(path_to_client_secret)
             self.__spreadsheet_id = re.search('docs\.google\.com/spreadsheets/d/([a-zA-Z0-9-_]*)/', sheets_url).group(1)
@@ -251,3 +257,7 @@ class GoogleSheetsClient:
         if os.path.isabs(path) and os.path.isfile(path):
             return path
         raise IOError('File not found')
+
+
+if __name__ == "__main__":
+    __init_args()
