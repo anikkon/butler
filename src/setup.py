@@ -1,21 +1,42 @@
+#!/usr/bin/env python3
 import argparse
 import pprint
 import pymongo
 import requests
-from pymongo.errors import ServerSelectionTimeoutError
-from utils.printer import info, warning, error
 from pymongo import MongoClient
-from consts.constants import *
-from utils.gsheets_client import GoogleSheetsClient
+from pymongo.errors import ServerSelectionTimeoutError
+from consts import *
+from utils import *
 
 
-client = MongoClient(MONGO_ADDRESS, MONGO_PORT)
-user_collection = client.iax058x.users
+# Where to get user data. Initialised by argparse
+# Default if google sheets
+DATA_SOURCE = INPU_DATA_SOURCE_GS
+
+try:
+    client = MongoClient(MONGO_ADDRESS, MONGO_PORT, serverSelectionTimeoutMS=10)
+    user_collection = client.iax058x.users
+except ServerSelectionTimeoutError:
+    error('Mongo timeout. '
+          'Make sure Mongo server is running and the port number is same as in the configuration file!')
+    exit(1)
+
+
+def args_init():
+    parser = argparse.ArgumentParser(description='Setup script.')
+    parser.add_argument('--dataFrom', action='store', choices=INPUT_DATA_SOURCES, dest='DATA_SOURCE',
+                        required=True, help='where to retrieve user data from')
+    parser.parse_args()
 
 
 def config():
-    #  TODO add support for smth other than GS
-    users = get_google_sheets_data()
+    if DATA_SOURCE == INPU_DATA_SOURCE_GS:
+        users = load_gsheets_data()
+    else:
+        # load from somewhere else..
+        # currently not supported
+        # TODO
+        return
     old_users = mongo_get_users()
     info('Found {0} username pairs in Google Sheets.'.format(len(users)))
     info('Verifying Slack usernames.')
@@ -40,7 +61,7 @@ def config():
     info('Done!')
 
 
-def get_google_sheets_data():
+def load_gsheets_data():
     columns = GoogleSheetsClient(GOOGLE_SHEETS_URL, GOOGLE_SHEETS_CLIENT_SECRET_PATH).get_whole_sheet()
     slack_users = None
     gitlab_users = None
@@ -317,4 +338,5 @@ def post_gitlab_webhook(project_id, url, issue_events=True, note_events=True, ve
 
 
 if __name__ == '__main__':
+    args_init()
     config()

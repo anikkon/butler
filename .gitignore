@@ -3,7 +3,6 @@ venv
 src/__pycache__
 src/consts/__pycache__
 src/utils/__pycache__
-src/app/__pycache__
-config.py
 config
+app.config.yaml
 

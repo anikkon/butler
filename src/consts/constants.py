@@ -1,40 +1,46 @@
 """
 NB! Don't touch this unless you know what you're doing!
 """
-import config as cf
+import yaml
+import os.path
 
 
-SERVER_PORT = cf.SERVER_PORT
-MONGO_PORT = cf.MONGO_PORT
-MONGO_ADDRESS = cf.MONGO_ADDRESS
-SERVER_ADDRESS = cf.SERVER_ADDRESS    # TODO change this line for the following in prod
-# SERVER_ADDRESS = params.SERVER_ADDRESS + ":" + params.SERVER_PORT
-SSL_VERIFY = cf.SSL_VERIFY
-REQUEST_TIMEOUT = cf.REQUEST_TIMEOUT
+path = os.path.abspath("app.config.yaml")
+print(path)
+
+with open(path, "r") as f:
+    settings = yaml.load(f)
+
+SERVER_PORT = settings['server']['port']
+MONGO_PORT = settings['mongo']['port']
+MONGO_ADDRESS = settings['mongo']['address']
+SERVER_ADDRESS = settings['server']['address'] + ":" + str(settings['server']['port'])
+SSL_VERIFY = settings['requests']['ssl_verify']
+REQUEST_TIMEOUT = settings['requests']['timeout']
 
 '''
 Google Sheets
 '''
-GOOGLE_SHEETS_URL = cf.GOOGLE_SHEETS_URL
-GOOGLE_SHEETS_SHEET_NAME = cf.GOOGLE_SHEETS_SHEET_NAME
-GOOGLE_SHEETS_COL_SLACK_UNAMES = cf.GOOGLE_SHEETS_COL_SLACK_UNAMES
-GOOGLE_SHEETS_COL_GITLAB_UNAMES = cf.GOOGLE_SHEETS_COL_GITLAB_UNAMES
-GOOGLE_SHEETS_COL_GITLAB_REPOS = cf.GOOGLE_SHEETS_COL_GITLAB_REPOS
-GOOGLE_SHEETS_CLIENT_SECRET_PATH = cf.GOOGLE_SHEETS_CLIENT_SECRET_PATH
+GOOGLE_SHEETS_URL = settings['gsheets']['url']
+GOOGLE_SHEETS_SHEET_NAME = settings['gsheets']['sheet_name']
+GOOGLE_SHEETS_COL_SLACK_UNAMES = settings['gsheets']['column_slack_unames']
+GOOGLE_SHEETS_COL_GITLAB_UNAMES = settings['gsheets']['column_gitlab_unames']
+GOOGLE_SHEETS_COL_GITLAB_REPOS = settings['gsheets']['column_gitlab_repos']
+GOOGLE_SHEETS_CLIENT_SECRET_PATH = settings['gsheets']['client_secret_path']
+GOOGLE_SHEETS_COLUMN_OFFSET = settings['gsheets']['column_offset']
 
 '''
 Gitlab
 '''
-__GITLAB_BASE_URL = cf.GITLAB_ROOT_URL + 'api/v4/'
+__GITLAB_BASE_URL = settings['gitlab']['root_url'] + 'api/v4/'
 GITLAB_GET_PROJECTS_URL = __GITLAB_BASE_URL + 'users/{username}/projects?simple=true'
 GITLAB_GET_USER_URL = __GITLAB_BASE_URL + 'users?username={username}'
 GITLAB_GET_PROJECT_HOOKS = __GITLAB_BASE_URL + '/projects/{project_id}/hooks'
 GITLAB_GET_PUT_DELETE_PROJECT_HOOK = __GITLAB_BASE_URL + '/projects/{project_id}/hooks/{hook_id}'
 GITLAB_POST_WEBHOOK_URL = __GITLAB_BASE_URL + 'projects/{project_id}/hooks'
-GOOGLE_SHEETS_COLUMN_OFFSET = cf.GOOGLE_SHEETS_COLUMN_OFFSET
 GITLAB_EVENT_ISSUE = 'Issue Hook'
 GITLAB_EVENT_NOTE = 'Note Hook'
-GITLAB_AUTH_HEADER = {'PRIVATE-TOKEN': cf.GITLAB_AUTH_TOKEN}
+GITLAB_AUTH_HEADER = {'PRIVATE-TOKEN': settings['gitlab']['auth_token']}
 
 '''
 Slack
@@ -42,13 +48,13 @@ Slack
 __SLACK_BASE_URL = 'https://slack.com/api/'
 SLACK_POST_MESSAGE_URL = __SLACK_BASE_URL + 'chat.postMessage'
 SLACK_GET_USER_LIST_URL = __SLACK_BASE_URL + 'users.list'
-SLACK_AUTH_HEADER = {'Authorization': 'Bearer ' + cf.SLACK_AUTH_TOKEN}
+SLACK_AUTH_HEADER = {'Authorization': 'Bearer ' + settings['slack']['auth_token']}
 
 '''
-Strings
+Stringsssl_verify
 '''
-ISSUE_MSG_TO_USER = cf.ISSUE_MSG_TO_USER
-ISSUE_MSG_TO_ASSIGNEE = cf.ISSUE_MSG_TO_AUTHOR
+ISSUE_MSG_TO_USER = settings['slack']['messages']['issue']['to_user']
+ISSUE_MSG_TO_ASSIGNEE = settings['slack']['messages']['issue']['to_author']
 ISSUE_COLOR = '#d32f2f'
 
 ''''
@@ -60,3 +66,11 @@ KEY_GITLAB_UNAME = 'gitlab_username'
 KEY_GITLAB_REPO_NAME = 'gitlab_repo_name'  # Optional
 KEY_GITLAB_REPO_ID = 'gitlab_repo_id'  # Optional
 KEY_GITLAB_REPO_HOOK_ID = 'gitlab_repo_hook_id'  # Optional
+
+'''
+Supported operations & options
+'''
+# Supported sources of user data. Add options here adding support for more
+INPU_DATA_SOURCE_GS = 'google-sheets'
+INPUT_DATA_SOURCES = [INPU_DATA_SOURCE_GS]
+SUPPORTED_GITLAB_EVENTS = [GITLAB_EVENT_ISSUE]

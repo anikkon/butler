@@ -45,7 +45,6 @@ class GoogleSheetsClient:
         If no credentials are found or they are invalid user is prompted for authentication
         to to obtain the new credentials.
         """
-        # self.__init_args()
         try:
             path_to_client_secret = self.__get_absolute_path(path_to_client_secret)
             self.__spreadsheet_id = re.search('docs\.google\.com/spreadsheets/d/([a-zA-Z0-9-_]*)/', sheets_url).group(1)

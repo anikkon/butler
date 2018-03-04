@@ -1,27 +1,28 @@
+#!/usr/bin/env python3
 import pprint
-from pymongo.errors import ServerSelectionTimeoutError
-from utils.printer import warning, error, info
 from flask import Flask, request
-from requests import post
 from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError
+from requests import post
 from consts import *
+from utils.printer import error, warning
 
-
-# TODO hande 'close issue' events
+# TODO handle 'close issue' events
+# TODO Note Hook for issue comments
 
 app = Flask(__name__)
-client = MongoClient('localhost', MONGO_PORT)
-user_collection = client.iax058x.users
-
-# TODO Note Hook for issue comments
-# TODO start mongo manually
-
-SUPPORTED_EVENTS = [GITLAB_EVENT_ISSUE]
+user_collection = ''
 
 
-def verify_state():
-    # TODO run a test bundle on startup to verify all running
-    pass
+def start_mongo():
+    try:
+        client = MongoClient(MONGO_ADDRESS, MONGO_PORT, serverSelectionTimeoutMS=10)
+        global user_collection
+        user_collection = client.iax058x.users
+    except ServerSelectionTimeoutError:
+        error('Mongo timeout. '
+              'Make sure Mongo server is running and the port number is same as in the configuration file!')
+        exit(1)
 
 
 @app.route('/', methods=['GET'])
@@ -36,7 +37,7 @@ def gitlab_post_hook():
 
     print('X-Gitlab-Event ', event_type)
 
-    if event_type in SUPPORTED_EVENTS and payload is not None:
+    if event_type in SUPPORTED_GITLAB_EVENTS and payload is not None:
         return send_slack_message(payload)
 
     return '', 400
@@ -127,5 +128,5 @@ def send_slack_message(payload):
 
 
 if __name__ == '__main__':
-    verify_state()
+    start_mongo()
     app.run(port=SERVER_PORT)

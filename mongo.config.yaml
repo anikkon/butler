@@ -1,0 +1,19 @@
+# MongoDB configuration file
+# Don't touch this file unless you know what you're doing
+systemLog:
+   logAppend: true
+   timeStampFormat: iso8601-utc
+storage:
+    engine: wiredTiger
+    journal:
+        enabled: true
+processManagement:
+   fork: true
+net:
+   # Server and mongo are assumed to be run on the same machine
+   bindIp: 127.0.0.1
+   port: 6000
+setParameter:
+   enableLocalhostAuthBypass: false
+security:
+   javascriptEnabled: false
