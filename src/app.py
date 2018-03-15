@@ -5,13 +5,13 @@ from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 from requests import post
 from consts import *
-from utils.printer import error, warning
+from utils import error, warning
 
-# TODO handle 'close issue' events
-# TODO Note Hook for issue comments
 
 app = Flask(__name__)
-user_collection = ''
+user_collection = None
+
+SLACK_REQUESTS_HEADER = {**{'Content-type': 'application/json'}, **SLACK_AUTH_HEADER}
 
 
 def start_mongo():
@@ -33,98 +33,120 @@ def ping():
 @app.route('/', methods=['POST'])
 def gitlab_post_hook():
     payload = request.get_json()
+    pprint.pprint(payload)
     event_type = request.headers.get('X-Gitlab-Event')
 
-    print('X-Gitlab-Event ', event_type)
+    if payload is None or event_type not in SUPPORTED_GITLAB_EVENTS:
+        return '', 400
+    if event_type == GITLAB_EVENT_ISSUE:
+        return issue_event(payload)
+    if event_type == GITLAB_EVENT_NOTE:
+        return note_event(payload)
 
-    if event_type in SUPPORTED_GITLAB_EVENTS and payload is not None:
-        return send_slack_message(payload)
 
-    return '', 400
+def issue_event(payload):
+    user = get_user(payload)
+    author = get_author(payload)
+    issue = get_issue(payload)
+
+    if not user: return '', 400
+    if not author: author = {}
+
+    attachment_for_user = {
+        **new_attachment(ISSUE_MSG_TO_USER, "Assigned by", '@' + author.get(KEY_SLACK_UNAME)),
+        **issue}
+
+    attachment_for_author = {
+        **new_attachment(ISSUE_MSG_TO_AUTHOR, "Assigned to", '@' + user.get(KEY_SLACK_UNAME)),
+        **issue}
+
+    msg_to_user = new_slack_message(user.get(KEY_SLACK_ID), attachment=attachment_for_user)
+    msg_to_author = new_slack_message(author.get(KEY_SLACK_ID), attachment=attachment_for_author)
+
+    post(SLACK_POST_MESSAGE_URL, json=msg_to_user, headers=SLACK_REQUESTS_HEADER)
+    if author.get(KEY_SLACK_ID):
+        post(SLACK_POST_MESSAGE_URL, json=msg_to_author, headers=SLACK_REQUESTS_HEADER)
+
+    return '', 200
 
 
-def send_slack_message(payload):
-    print('Trying to post to slack')
-    pprint.pprint(payload)
+def note_event(payload):
+    issue_owner = mongo_find_one({KEY_GITLAB_USER_ID: payload.get('issue', {}).get('author_id', '')})
+    comment_author = get_author(payload)
+    repo_owner = get_user(payload)
+    note = get_note(payload)
 
-    oa = payload.get('object_attributes', {})
-    author_uname = payload.get('user', {}).get('username', "")
-    project_id = oa.get('project_id')
+    notify_repo_owner = repo_owner != issue_owner and repo_owner != comment_author
+    notify_issue_owner = issue_owner != comment_author
 
-    if not project_id or not author_uname:
-        error('Couldn\'t retrieve project id or author. Skipping.')
-        return
+    attachment = {
+        **new_attachment(NOTE_MSG_TO_ALL, "Commented by", '@' + comment_author.get(KEY_SLACK_UNAME)),
+        **note}
 
+    msg_to_issue_owner = new_slack_message(issue_owner.get(KEY_SLACK_ID), attachment=attachment)
+    msg_to_repo_owner = new_slack_message(repo_owner.get(KEY_SLACK_ID), attachment=attachment)
+
+    if notify_issue_owner:
+        post(SLACK_POST_MESSAGE_URL, json=msg_to_issue_owner, headers=SLACK_REQUESTS_HEADER)
+    if notify_repo_owner:
+        post(SLACK_POST_MESSAGE_URL, json=msg_to_repo_owner, headers=SLACK_REQUESTS_HEADER)
+
+    return '', 200
+
+
+def mongo_find_one(param):
     try:
-        user_obj = user_collection.find_one({KEY_GITLAB_REPO_ID: project_id})
-        author_obj = user_collection.find_one({KEY_GITLAB_UNAME: author_uname})
+        return user_collection.find_one(param)
     except ServerSelectionTimeoutError:
         error('Mongo timeout. '
               'Make sure Mongo server is running and the port number is same as in the configuration file!')
-        return
 
-    if not user_obj:
-        warning('Received an issue for project with id {0}, but can\'t find the owner.'.format(project_id))
-        return
-    if not author_obj:
-        warning(
-            'Received an issue assigned by {0}, but author is not in database.'.format(author_uname))
 
-    user_slack_id = user_obj.get(KEY_SLACK_ID)
-    user_slack_uname = user_obj.get(KEY_SLACK_UNAME)
-    author_slack_id = author_obj.get(KEY_SLACK_ID)
-    author_slack_uname = author_obj.get(KEY_SLACK_UNAME)
+def get_user(payload):
+    oa = payload.get('object_attributes', {})
+    project_id = oa.get('project_id')
+    user = mongo_find_one({KEY_GITLAB_REPO_ID: project_id})
+    if user: return user
+    warning('Received an event for project with id {0}, but can\'t find the owner.'.format(project_id))
 
-    issue_url = oa.get('url')
-    issue_title = oa.get('title')
-    issue_description = oa.get('description')
-    issue_info = {}
-    if issue_title:
-        issue_info["title"] = issue_title
-    if issue_url:
-        issue_info['title_link'] = issue_url
-    if issue_description:
-        issue_info["text"] = issue_description
 
-    attachment_for_user = {**{
-        "color": ISSUE_COLOR, "pretext": ISSUE_MSG_TO_USER, "fields": [
-            {
-                "title": "Assigned by",
-                "value": '@' + author_slack_uname,
-                "short": "true"
-            }
-        ]}, **issue_info}
+def get_author(payload):
+    uname = payload.get('user', {}).get('username', "")
+    author = mongo_find_one({KEY_GITLAB_UNAME: uname})
+    if author: return author
+    warning('Can\'t find user {0} in the database'.format(uname))
 
-    attachment_for_author = {**{
-        "color": ISSUE_COLOR, "pretext": ISSUE_MSG_TO_ASSIGNEE, "fields": [
-            {
-                "title": "Assigned to",
-                "value": '@' + user_slack_uname,
-                "short": "true"
-            }
-        ]}, **issue_info}
 
-    headers = {
-        **{'Content-type': 'application/json'},
-        **SLACK_AUTH_HEADER
-    }
+def get_issue(payload):
+    oa = payload.get('object_attributes', {})
+    url = oa.get('url')
+    title = oa.get('title')
+    description = oa.get('description')
+    issue = {}
+    if title: issue["title"] = title
+    if url: issue['title_link'] = url
+    if description: issue["text"] = description
+    return issue
 
-    content_to_user = {
-        "channel": user_slack_id,
-        'as_user': 'true',
-        "attachments": [attachment_for_user]
-    }
-    post(SLACK_POST_MESSAGE_URL, json=content_to_user, headers=headers)
 
-    if author_slack_id:
-        content_to_author = {
-            "channel": author_slack_id,
-            'as_user': 'true',
-            "attachments": [attachment_for_author]
-        }
-        post(SLACK_POST_MESSAGE_URL, json=content_to_author, headers=headers)
+def get_note(payload):
+    oa = payload.get('object_attributes', {})
+    url = oa.get('url')
+    content = oa.get('note')
+    note = {}
+    note['title'] = 'CLick here for details'
+    if content: note['text'] = content
+    if url: note['title_link'] = url
+    return note
 
-    return '', 200
+
+def new_attachment(pretext, title, value, color=ISSUE_COLOR):
+    return {"color": color, "pretext": pretext, "fields": [{
+        "title": title, "value": value, "short": "false"}]}
+
+
+def new_slack_message(channel_id, attachment=None, as_user=True):
+    return {"channel": channel_id, 'as_user': as_user, "attachments": [attachment]}
 
 
 if __name__ == '__main__':

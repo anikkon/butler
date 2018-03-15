@@ -54,7 +54,8 @@ SLACK_AUTH_HEADER = {'Authorization': 'Bearer ' + settings['slack']['auth_token'
 Stringsssl_verify
 '''
 ISSUE_MSG_TO_USER = settings['slack']['messages']['issue']['to_user']
-ISSUE_MSG_TO_ASSIGNEE = settings['slack']['messages']['issue']['to_author']
+ISSUE_MSG_TO_AUTHOR = settings['slack']['messages']['issue']['to_author']
+NOTE_MSG_TO_ALL = settings['slack']['messages']['note']['to_all']
 ISSUE_COLOR = '#d32f2f'
 
 ''''
@@ -63,6 +64,7 @@ Database keys
 KEY_SLACK_UNAME = 'slack_username'
 KEY_SLACK_ID = 'slack_id'
 KEY_GITLAB_UNAME = 'gitlab_username'
+KEY_GITLAB_USER_ID = 'gitlab_id'
 KEY_GITLAB_REPO_NAME = 'gitlab_repo_name'  # Optional
 KEY_GITLAB_REPO_ID = 'gitlab_repo_id'  # Optional
 KEY_GITLAB_REPO_HOOK_ID = 'gitlab_repo_hook_id'  # Optional
@@ -71,6 +73,6 @@ KEY_GITLAB_REPO_HOOK_ID = 'gitlab_repo_hook_id'  # Optional
 Supported operations & options
 '''
 # Supported sources of user data. Add options here adding support for more
-INPU_DATA_SOURCE_GS = 'google-sheets'
-INPUT_DATA_SOURCES = [INPU_DATA_SOURCE_GS]
-SUPPORTED_GITLAB_EVENTS = [GITLAB_EVENT_ISSUE]
+INPUT_DATA_SOURCE_GS = 'google-sheets'
+INPUT_DATA_SOURCES = [INPUT_DATA_SOURCE_GS]
+SUPPORTED_GITLAB_EVENTS = [GITLAB_EVENT_ISSUE, GITLAB_EVENT_NOTE]

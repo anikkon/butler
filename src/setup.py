@@ -10,8 +10,8 @@ from utils import *
 
 
 # Where to get user data. Initialised by argparse
-# Default if google sheets
-DATA_SOURCE = INPU_DATA_SOURCE_GS
+# Default is google sheets
+DATA_SOURCE = INPUT_DATA_SOURCE_GS
 
 try:
     client = MongoClient(MONGO_ADDRESS, MONGO_PORT, serverSelectionTimeoutMS=10)
@@ -30,7 +30,7 @@ def args_init():
 
 
 def config():
-    if DATA_SOURCE == INPU_DATA_SOURCE_GS:
+    if DATA_SOURCE == INPUT_DATA_SOURCE_GS:
         users = load_gsheets_data()
     else:
         # load from somewhere else..
@@ -174,13 +174,17 @@ def verify_gitlab_users(users):
     for user in users:
         repo_name = user.get(KEY_GITLAB_REPO_NAME, '').lower()
         uname = user.get(KEY_GITLAB_UNAME, '')
+        user_data = verify_gitlab_user(user)
+
         if not repo_name:
             # User has no Gitlab repo. Verifying username only.
             warning('Gitlab user \'{username}\' doesn\'t have a repository field. Verifying username only.'
                     .format(username=uname))
-            if verify_gitlab_user(user):
+            if user_data:
                 verified_users.append(user)
+        if not user_data:
             continue
+        user[KEY_GITLAB_USER_ID] = user_data.get('id')
 
         # User does have a Gitlab repo. Verifying both username and repo name.
         projects = get_gitlab_user_projects(user)
@@ -210,10 +214,9 @@ def verify_gitlab_user(user):
         warning('Woops, something went wrong! Gitlab returned {0}'.format(response.status_code))
     elif response.json():
         # If user exists non-empty json object is returned
-        return True
+        return response.json()[0]
     else:
         warning('Gitlab user \'{username}\' doesn\'t exist. Skipping'.format(username=uname))
-    return False
 
 
 def verify_users_not_empty(users):
@@ -282,6 +285,8 @@ def mongo_insert_users(users):
         user_collection.drop()
         user_collection.insert_many(users)
         user_collection.create_index([(KEY_GITLAB_UNAME, pymongo.ASCENDING)])
+        user_collection.create_index([(KEY_GITLAB_REPO_ID, pymongo.ASCENDING)])
+        user_collection.create_index([(KEY_GITLAB_USER_ID, pymongo.ASCENDING)])
     except ServerSelectionTimeoutError:
         error('Mongo timeout. '
               'Make sure Mongo server is running and the port number is same as in the configuration file!')

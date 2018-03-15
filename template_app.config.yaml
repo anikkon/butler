@@ -44,3 +44,5 @@ slack:
     issue:
       to_user: 'You''ve got an issue, sir! :bug:'
       to_author: 'You''ve opened an issue, sir! :face_with_rolling_eyes:'
+    note:
+      to_all: 'You''ve got an issue comment :information_source:'
