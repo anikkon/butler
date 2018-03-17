@@ -11,7 +11,7 @@ Example usage:
 """
 
 import httplib2, os, re
-from consts import GOOGLE_SHEETS_SHEET_NAME
+from consts import *
 from apiclient import discovery
 from oauth2client import client, tools
 from oauth2client.file import Storage
@@ -26,7 +26,7 @@ CLIENT_CREDENTIALS_FILE = 'google-sheets-master.json'
 flags = None
 
 
-def __init_args():
+def init_args():
     global flags
     try:
         import argparse
@@ -38,6 +38,7 @@ def __init_args():
 class GoogleSheetsClient:
 
     def __init__(self, sheets_url, path_to_client_secret):
+
         """Args:
             :param sheets_url:            (str): URL of the Google Sheet to be processed.
             :param path_to_client_secret: (str): path to client credentials json file, relative or absolute
@@ -45,6 +46,7 @@ class GoogleSheetsClient:
         If no credentials are found or they are invalid user is prompted for authentication
         to to obtain the new credentials.
         """
+        init_args()
         try:
             path_to_client_secret = self.__get_absolute_path(path_to_client_secret)
             self.__spreadsheet_id = re.search('docs\.google\.com/spreadsheets/d/([a-zA-Z0-9-_]*)/', sheets_url).group(1)
@@ -224,11 +226,15 @@ class GoogleSheetsClient:
 
         store = Storage(credential_path)
         credentials = store.get()
+        print('\n\nFlags are ' + str(flags) + '\n\n')
         if not credentials or credentials.invalid:
             flow = client.flow_from_clientsecrets(client_secret, SCOPES)
             flow.user_agent = APPLICATION_NAME
             if flags:
-                credentials = tools.run_flow(flow, store, flags)
+                credentials = tools.run_flow(flow, store)
+                import pprint
+                print('Got new credentials')
+                pprint.pprint(credentials)
             else:  # Needed only for compatibility with Python 2.6
                 credentials = tools.run(flow, store)
             print('Storing credentials to ' + credential_path)

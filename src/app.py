@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import pprint
 from flask import Flask, request
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
@@ -33,7 +32,6 @@ def ping():
 @app.route('/', methods=['POST'])
 def gitlab_post_hook():
     payload = request.get_json()
-    pprint.pprint(payload)
     event_type = request.headers.get('X-Gitlab-Event')
 
     if payload is None or event_type not in SUPPORTED_GITLAB_EVENTS:

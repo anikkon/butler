@@ -17,6 +17,9 @@ server:
   port: 5000                    # Port of the server, aka webhook
   address: ''                   # NB! Use the full url with the protocol prefix, e.g. 'https://whatever.com'
 
+data:
+  from: 'google-sheets'         # Where to load initial userdata form
+
 requests:
   ssl_verify: true              # Whether to verify ssl certificates
   request_timeout: 10           # Timeout for requests to gitlab & slack

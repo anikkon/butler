@@ -9,10 +9,6 @@ from consts import *
 from utils import *
 
 
-# Where to get user data. Initialised by argparse
-# Default is google sheets
-DATA_SOURCE = INPUT_DATA_SOURCE_GS
-
 try:
     client = MongoClient(MONGO_ADDRESS, MONGO_PORT, serverSelectionTimeoutMS=10)
     user_collection = client.iax058x.users
@@ -22,15 +18,8 @@ except ServerSelectionTimeoutError:
     exit(1)
 
 
-def args_init():
-    parser = argparse.ArgumentParser(description='Setup script.')
-    parser.add_argument('--dataFrom', action='store', choices=INPUT_DATA_SOURCES, dest='DATA_SOURCE',
-                        required=True, help='where to retrieve user data from')
-    parser.parse_args()
-
-
 def config():
-    if DATA_SOURCE == INPUT_DATA_SOURCE_GS:
+    if DATA_FROM == INPUT_DATA_SOURCE_GS:
         users = load_gsheets_data()
     else:
         # load from somewhere else..
@@ -343,5 +332,4 @@ def post_gitlab_webhook(project_id, url, issue_events=True, note_events=True, ve
 
 
 if __name__ == '__main__':
-    args_init()
     config()
