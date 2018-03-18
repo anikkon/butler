@@ -149,4 +149,4 @@ def new_slack_message(channel_id, attachment=None, as_user=True):
 
 if __name__ == '__main__':
     start_mongo()
-    app.run(port=SERVER_PORT)
+    app.run(host='0.0.0.0', port=SERVER_PORT)

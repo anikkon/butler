@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-import argparse
 import pprint
+
 import pymongo
 import requests
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
+
 from consts import *
 from utils import *
 
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 try:
     client = MongoClient(MONGO_ADDRESS, MONGO_PORT, serverSelectionTimeoutMS=10)
@@ -135,6 +139,9 @@ def verify_slack_users(users):
         real_name = slack_user.get('real_name', None)
         display_name = slack_user.get('profile', {}).get('display_name', None)
         user_id = slack_user.get('id', None)
+        deleted = slack_user.get('deleted')
+        if deleted:
+            continue
         try:
             verify_user(name, user_id, unames.index(display_name))
             continue
@@ -166,13 +173,18 @@ def verify_gitlab_users(users):
         user_data = verify_gitlab_user(user)
 
         if not repo_name:
-            # User has no Gitlab repo. Verifying username only.
             warning('Gitlab user \'{username}\' doesn\'t have a repository field. Verifying username only.'
                     .format(username=uname))
-            if user_data:
-                verified_users.append(user)
+
         if not user_data:
+            warning('Gitlab user \'{username}\' doesn\'t exist. Skipping'.format(username=uname))
             continue
+
+        if not repo_name:
+            # User has no Gitlab repo. Verifying username only.
+            verified_users.append(user)
+            continue
+
         user[KEY_GITLAB_USER_ID] = user_data.get('id')
 
         # User does have a Gitlab repo. Verifying both username and repo name.
@@ -204,8 +216,6 @@ def verify_gitlab_user(user):
     elif response.json():
         # If user exists non-empty json object is returned
         return response.json()[0]
-    else:
-        warning('Gitlab user \'{username}\' doesn\'t exist. Skipping'.format(username=uname))
 
 
 def verify_users_not_empty(users):

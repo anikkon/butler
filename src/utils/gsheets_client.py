@@ -226,15 +226,11 @@ class GoogleSheetsClient:
 
         store = Storage(credential_path)
         credentials = store.get()
-        print('\n\nFlags are ' + str(flags) + '\n\n')
         if not credentials or credentials.invalid:
             flow = client.flow_from_clientsecrets(client_secret, SCOPES)
             flow.user_agent = APPLICATION_NAME
             if flags:
                 credentials = tools.run_flow(flow, store)
-                import pprint
-                print('Got new credentials')
-                pprint.pprint(credentials)
             else:  # Needed only for compatibility with Python 2.6
                 credentials = tools.run(flow, store)
             print('Storing credentials to ' + credential_path)
