@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-import argparse
 import pprint
+
 import pymongo
 import requests
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
+
 from consts import *
 from utils import *
 
+import urllib3
 
-# Where to get user data. Initialised by argparse
-# Default is google sheets
-DATA_SOURCE = INPUT_DATA_SOURCE_GS
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 try:
     client = MongoClient(MONGO_ADDRESS, MONGO_PORT, serverSelectionTimeoutMS=10)
@@ -22,15 +22,8 @@ except ServerSelectionTimeoutError:
     exit(1)
 
 
-def args_init():
-    parser = argparse.ArgumentParser(description='Setup script.')
-    parser.add_argument('--dataFrom', action='store', choices=INPUT_DATA_SOURCES, dest='DATA_SOURCE',
-                        required=True, help='where to retrieve user data from')
-    parser.parse_args()
-
-
 def config():
-    if DATA_SOURCE == INPUT_DATA_SOURCE_GS:
+    if DATA_FROM == INPUT_DATA_SOURCE_GS:
         users = load_gsheets_data()
     else:
         # load from somewhere else..
@@ -41,6 +34,7 @@ def config():
     info('Found {0} username pairs in Google Sheets.'.format(len(users)))
     info('Verifying Slack usernames.')
     users = verify_slack_users(users)
+    info('Verified {0} users.'.format(len(users)))
     info('Verified {0} users.'.format(len(users)))
     info('Verifying Gitlab usernames and projects.')
     users = verify_gitlab_users(users)
@@ -89,17 +83,18 @@ def load_gsheets_data():
 
     for i in range(0, min(len(slack_users), len(gitlab_users))):
         if slack_users[i] and gitlab_users[i]:
-            users.append({
+            user = {
                 KEY_SLACK_UNAME: slack_users[i],
                 KEY_GITLAB_UNAME: gitlab_users[i]
-            })
+            }
             try:
                 repo_name = gitlab_repos[i]
                 if repo_name:
-                    users[i][KEY_GITLAB_REPO_NAME] = repo_name
+                    user[KEY_GITLAB_REPO_NAME] = repo_name
             except IndexError:
                 # We care only about slack_users and gitlab_users, gitlab_repos can be of any length throwing exception
                 pass
+            users.append(user)
 
     verify_users_not_empty(users)
     return users
@@ -146,6 +141,9 @@ def verify_slack_users(users):
         real_name = slack_user.get('real_name', None)
         display_name = slack_user.get('profile', {}).get('display_name', None)
         user_id = slack_user.get('id', None)
+        deleted = slack_user.get('deleted')
+        if deleted:
+            continue
         try:
             verify_user(name, user_id, unames.index(display_name))
             continue
@@ -177,13 +175,18 @@ def verify_gitlab_users(users):
         user_data = verify_gitlab_user(user)
 
         if not repo_name:
-            # User has no Gitlab repo. Verifying username only.
             warning('Gitlab user \'{username}\' doesn\'t have a repository field. Verifying username only.'
                     .format(username=uname))
-            if user_data:
-                verified_users.append(user)
+
         if not user_data:
+            warning('Gitlab user \'{username}\' doesn\'t exist. Skipping'.format(username=uname))
             continue
+
+        if not repo_name:
+            # User has no Gitlab repo. Verifying username only.
+            verified_users.append(user)
+            continue
+
         user[KEY_GITLAB_USER_ID] = user_data.get('id')
 
         # User does have a Gitlab repo. Verifying both username and repo name.
@@ -195,10 +198,10 @@ def verify_gitlab_users(users):
             if repo_name == r_name.lower():
                 r_id = project.get('id', '')
                 user[KEY_GITLAB_REPO_ID] = r_id
-                verified_users.append(user)
                 break
         else:
-            warning('Couldn\'t find project {0} for user \'{1}\'. Skipping.'.format(repo_name, uname))
+            warning('Couldn\'t find project {0} for user \'{1}\'.'.format(repo_name, uname))
+        verified_users.append(user)
 
     if not verified_users:
         warning('Couldn\'t verify any gitlab users. Make sure Gitlab auth token is correct.')
@@ -215,8 +218,6 @@ def verify_gitlab_user(user):
     elif response.json():
         # If user exists non-empty json object is returned
         return response.json()[0]
-    else:
-        warning('Gitlab user \'{username}\' doesn\'t exist. Skipping'.format(username=uname))
 
 
 def verify_users_not_empty(users):
@@ -343,5 +344,4 @@ def post_gitlab_webhook(project_id, url, issue_events=True, note_events=True, ve
 
 
 if __name__ == '__main__':
-    args_init()
     config()

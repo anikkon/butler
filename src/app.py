@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import pprint
 from flask import Flask, request
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
@@ -33,7 +32,6 @@ def ping():
 @app.route('/', methods=['POST'])
 def gitlab_post_hook():
     payload = request.get_json()
-    pprint.pprint(payload)
     event_type = request.headers.get('X-Gitlab-Event')
 
     if payload is None or event_type not in SUPPORTED_GITLAB_EVENTS:
@@ -151,4 +149,4 @@ def new_slack_message(channel_id, attachment=None, as_user=True):
 
 if __name__ == '__main__':
     start_mongo()
-    app.run(port=SERVER_PORT)
+    app.run(host='0.0.0.0', port=SERVER_PORT)

@@ -17,6 +17,7 @@ MONGO_ADDRESS = settings['mongo']['address']
 SERVER_ADDRESS = settings['server']['address'] + ":" + str(settings['server']['port'])
 SSL_VERIFY = settings['requests']['ssl_verify']
 REQUEST_TIMEOUT = settings['requests']['timeout']
+DATA_FROM = settings['data']['from']
 
 '''
 Google Sheets
