@@ -35,6 +35,7 @@ def config():
     info('Verifying Slack usernames.')
     users = verify_slack_users(users)
     info('Verified {0} users.'.format(len(users)))
+    info('Verified {0} users.'.format(len(users)))
     info('Verifying Gitlab usernames and projects.')
     users = verify_gitlab_users(users)
     info('Verified {0} users.'.format(len(users)))
@@ -82,17 +83,18 @@ def load_gsheets_data():
 
     for i in range(0, min(len(slack_users), len(gitlab_users))):
         if slack_users[i] and gitlab_users[i]:
-            users.append({
+            user = {
                 KEY_SLACK_UNAME: slack_users[i],
                 KEY_GITLAB_UNAME: gitlab_users[i]
-            })
+            }
             try:
                 repo_name = gitlab_repos[i]
                 if repo_name:
-                    users[i][KEY_GITLAB_REPO_NAME] = repo_name
+                    user[KEY_GITLAB_REPO_NAME] = repo_name
             except IndexError:
                 # We care only about slack_users and gitlab_users, gitlab_repos can be of any length throwing exception
                 pass
+            users.append(user)
 
     verify_users_not_empty(users)
     return users
@@ -196,10 +198,10 @@ def verify_gitlab_users(users):
             if repo_name == r_name.lower():
                 r_id = project.get('id', '')
                 user[KEY_GITLAB_REPO_ID] = r_id
-                verified_users.append(user)
                 break
         else:
-            warning('Couldn\'t find project {0} for user \'{1}\'. Skipping.'.format(repo_name, uname))
+            warning('Couldn\'t find project {0} for user \'{1}\'.'.format(repo_name, uname))
+        verified_users.append(user)
 
     if not verified_users:
         warning('Couldn\'t verify any gitlab users. Make sure Gitlab auth token is correct.')
